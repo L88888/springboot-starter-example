@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
@@ -53,9 +54,42 @@ public class SThreadLocal {
      * ThreadLocalPool
      * @author: LIULEI
      */
-    private ThreadPoolExecutor createThreadPool(){
-        return new ThreadPoolExecutor(5,5,0,
-                        TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(1000), new ThreadPoolExecutor.AbortPolicy());
+    private ThreadPoolExecutor createThreadPool(int capacity){
+        // RejectedExecutionHandler handler 该对象用于处理，达到现场池对象边界时的一些处理手段
+        // 通常的做法有这几种：一、直接抛出异常用以说明当前线程池处理的现场已经满负荷。二、自定义排队等待模式，多长时间后再来尝试给线程池里头添加
+        return new ThreadPoolExecutor(30,50,0,
+                        TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(capacity), new ConsumerHandler());
+    }
+
+    /**
+     * 当现场池中的现场数量达到预设值时，触发线程等待机制
+     */
+    public class ConsumerHandler implements RejectedExecutionHandler{
+
+        /**
+         * 线程池决绝添加线程后的处理机制，采用排队等待
+         * @param r 线程对象
+         * @param executor
+         */
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            boolean wait = false;
+            while (!wait){
+                try {
+                    // 处理添加不进去异常的问题
+                    // 添加不进去2秒后在尝试添加
+                    wait = executor.getQueue().add(r);
+                } catch (Exception e) {
+                    wait = false;
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e1) {
+                        e1.printStackTrace();
+                    }
+                    log.info("处理添加不进去异常的问题,添加不进去2秒后在尝试添加：>{}", e.fillInStackTrace());
+                }
+            }
+        }
     }
 
     /**
@@ -72,12 +106,12 @@ public class SThreadLocal {
         @Override
         public void run() {
             // 声明一个2M的数据缓存块
-            int[] temp = new int[2 * 1024 * 1024];
+            int[] temp = new int[1 * 1024 * 1024];
             Map mapData = new HashMap();
             mapData.put(Thread.currentThread().getName() + "<>" + Thread.currentThread().getId(), temp);
             alarmThreadLocalData.set(mapData);
 
-            log.info("{}", alarmThreadLocalData.get());
+            log.info("高并发场景应用测试，{}", alarmThreadLocalData.get());
 
             /**
              * 如果去掉下面的注释就可以正常运行
@@ -90,10 +124,12 @@ public class SThreadLocal {
 
     /**
      * 尝试输出ThreadLocal线程间数据隔离存储方法
+     * @param num 线程数量
+     * @param capacity 线程池队列容量
      * @author: LIULEI
      */
-    public void attemptPrint(int num){
-        ThreadPoolExecutor threadPoolExecutor = this.createThreadPool();
+    public void attemptPrint(int num,int capacity){
+        ThreadPoolExecutor threadPoolExecutor = this.createThreadPool(capacity);
         for (int i =0;i < num;i++){
 //            try {
                 // 暂停一秒

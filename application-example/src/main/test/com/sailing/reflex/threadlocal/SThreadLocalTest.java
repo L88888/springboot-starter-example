@@ -21,8 +21,9 @@ public class SThreadLocalTest {
             sThreadLocal.connSession();
         }
 
-        int num = 200;
-        sThreadLocal.attemptPrint(num);
+        int num = 60;
+        int capacity = 1;
+        sThreadLocal.attemptPrint(num, capacity);
     }
 
     @Test
