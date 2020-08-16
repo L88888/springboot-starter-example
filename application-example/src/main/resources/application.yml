@@ -18,3 +18,7 @@ com:
 sit:
   elasticsearch:
     clusterNodes: 172.20.32.192:9200
+
+feign:
+  hystrix:
+    enabled: true
